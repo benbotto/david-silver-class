@@ -51,3 +51,8 @@ In contrast, generating the sample games required by Monte Carlo methods is
 easy. This is the case surprisingly often; the ability of Monte Carlo methods
 to work with sample episodes alone can be a significant advantage even when
 one has complete knowledge of the environment’s dynamics.
+
+Dependencies:
+
+sudo apt-get install python3-tk
+pip install matplotlib
