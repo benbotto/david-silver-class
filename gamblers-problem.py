@@ -21,6 +21,7 @@ introduce two dummy states corresponding to termination with capital of 0 and
 as in Figure 4.6. Are your results stable as θ → 0?
 '''
 import numpy as np
+import matplotlib.pyplot as plt
 
 NUM_STATES = 100 # 100 states, corresponding to the gambler's capital.
 p_h        = .4  # Probability of heads coming up.
@@ -59,16 +60,6 @@ while delta > EPSILON:
     values[s] = max(actVals)
     delta = max(delta, abs(temp - values[s]))
 
-    #print(values)
-    #print(delta)
-
-# Print plot data for the value function.
-#print("Value function.")
-#print("Capital,Value")
-
-#for s in range(NUM_STATES + 1):
-#  print("{},{}".format(s,values[s]))
-
 # Evaluate the policy.
 for s in range(1, NUM_STATES):
   actions = np.arange(min(s, NUM_STATES - s) + 1)
@@ -77,21 +68,19 @@ for s in range(1, NUM_STATES):
   for a in actions:
     actVals.append(p_h * values[s + a] + (1 - p_h) * values[s - a])
 
-  #policy[s] = np.argmax(actVals)
+  policy[s] = np.argmax(actVals)
 
-  maxInd = 0
-  maxV = -1
-  for i in range(len(actVals)):
-    #if actVals[i] >= maxV:
-    if actVals[i] >= maxV:
-      maxV = actVals[i]
-      maxInd = i
+# Plot the value function.
+fig = plt.figure('Value Function')
+plt.plot([x for x in range(NUM_STATES + 1)], [y for y in values])
+plt.xlabel('Capital')
+plt.ylabel('Value Estimate')
 
-  policy[s] = maxInd
-print(policy)
+# Plot the policy.
+fig = plt.figure('Policy Function')
+plt.plot([x for x in range(NUM_STATES + 1)], [y for y in policy])
+plt.xlabel('Capital')
+plt.ylabel('Final Policy (Stake)')
 
-#print("Policy")
-print("Capital,Policy")
-for s in range(NUM_STATES + 1):
-  print("{},{}".format(s,policy[s]))
+plt.show()
 
