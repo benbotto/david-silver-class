@@ -25,11 +25,13 @@ def main():
   x = tf.placeholder(shape=[1, OBS_SIZE], dtype=tf.float32)
 
   # These are the weights which are what will be trained.
-  W = tf.Variable(tf.random_uniform([OBS_SIZE, ACT_SIZE]))
+  W  = tf.Variable(tf.random_uniform([OBS_SIZE, 5]))
+  H  = tf.nn.relu(tf.matmul(x, W))
+  W2 = tf.Variable(tf.random_uniform([5, ACT_SIZE]))
 
   # The action prediction is the maximum output (there are two, one for left,
   # one for right).
-  Qout       = tf.matmul(x, W)
+  Qout       = tf.matmul(H, W2)
   actPredict = tf.argmax(Qout, 1)
 
   # Sum of squares difference is used to find the loss and descend toward
@@ -52,14 +54,14 @@ def main():
 
       while not done:
         t += 1
-        env.render()
+        #env.render()
 
         # Run the inputs through the network to predict an action and get the Q
         # table.  (Both action and Q are 2D arrays with a single row, per the
         # graph defintion above.)
         action, Q = sess.run([actPredict, Qout], feed_dict={x: [lastObs]})
-        #print('Q')
-        #print(Q)
+        print('Q')
+        print(Q)
 
         # Choose a random action occasionally so that new paths are explored.
         if random.random() < math.pow(2, -episode / EXPLORE_CONST):
@@ -73,8 +75,8 @@ def main():
 
         # Now get Q' by feeding the new observation through the network.
         newQ = sess.run(Qout, feed_dict={x: [newObs]})
-        #print('New Q')
-        #print(newQ)
+        print('New Q')
+        print(newQ)
 
         # Of the Q values, this one is the max (e.g. the best estimated reward).
         bestQ = np.max(newQ)
@@ -89,13 +91,14 @@ def main():
         #print(Q)
 
         # Update the weights (train) using the updated Q target.
-        sess.run([updateModel, W], feed_dict={x: [lastObs], nextQ: Q})
+        sess.run([updateModel, W, W2], feed_dict={x: [lastObs], nextQ: Q})
 
         lastObs = newObs
 
         #time.sleep(.02)
 
-      print('Episode {} went for {} timesteps.'.format(episode+1, t))
+      if episode % 100 == 0 or t > 100:
+        print('Episode {} went for {} timesteps.'.format(episode+1, t))
 
 if __name__ == "__main__":
   main()
