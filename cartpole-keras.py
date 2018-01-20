@@ -10,23 +10,23 @@ env = gym.make('CartPole-v0')
 
 OBS_SIZE       = len(env.observation_space.low)
 ACT_SIZE       = env.action_space.n
-NUM_EPISODES   = 200000
+NUM_EPISODES   = 500
 LEARN_RATE     = 0.01
-REP_SIZE       = 1000
-REP_BATCH_SIZE = 100
+REP_SIZE       = 200
+REP_BATCH_SIZE = 20
 GAMMA          = .99
 
 # Higher means more exploration.  Basically, an e-greedy method is used,
 # but e is decayed over time as a function of episode.
-EXPLORE_CONST = 2000
+EXPLORE_CONST = 30
 
 def main():
   # Define the network model.
   model = tf.keras.models.Sequential()
 
-  model.add(tf.keras.layers.Dense(12, input_dim=OBS_SIZE, activation="relu"))
-  model.add(tf.keras.layers.Dense(24, activation="relu"))
-  model.add(tf.keras.layers.Dense(ACT_SIZE, activation="sigmoid"))
+  model.add(tf.keras.layers.Dense(8, input_dim=OBS_SIZE, activation="relu"))
+  model.add(tf.keras.layers.Dense(12, activation="relu"))
+  model.add(tf.keras.layers.Dense(ACT_SIZE, activation="softmax"))
 
   opt = tf.keras.optimizers.Adam(lr=LEARN_RATE)
 
@@ -81,14 +81,16 @@ def main():
       Y     = []
 
       for i in range(len(batch)):
-        X.append(np.array([batch[i]['lastObs']]))
+        X.append(batch[i]['lastObs'])
         oldQ = model.predict(np.array([batch[i]['lastObs']]))
         newQ = model.predict(np.array([batch[i]['newObs']]))
-        target = np.copy(oldQ) # Not needed, I think.  Just use oldQ...
-        target[0, batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
+        target = np.copy(oldQ)[0] # Not needed, I think.  Just use oldQ...
+        if batch[i]['done']:
+          target[batch[i]['action']] = -1
+        else:
+          target[batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
         Y.append(target)
-      print(X)
-      model.train_on_batch(X, Y)
+      model.train_on_batch(np.array(X), np.array(Y))
 
       '''
       # Now get Q' by feeding the new observation through the network.
