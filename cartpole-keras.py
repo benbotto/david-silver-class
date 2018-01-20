@@ -14,7 +14,7 @@ REP_SIZE           = 100
 REP_BATCH_SIZE     = 20
 GAMMA              = .99
 FIN_TRAIN_SOLVE_CT = 3
-EPSILON            = .15
+EPSILON            = .25
 
 def main():
   # Define the network model.
