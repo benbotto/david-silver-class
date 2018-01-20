@@ -9,16 +9,12 @@ env = gym.make('CartPole-v0')
 
 OBS_SIZE           = len(env.observation_space.low)
 ACT_SIZE           = env.action_space.n
-NUM_EPISODES       = 6000
 LEARN_RATE         = 0.001
 REP_SIZE           = 100
 REP_BATCH_SIZE     = 20
 GAMMA              = .99
 FIN_TRAIN_SOLVE_CT = 3
-
-# Higher means more exploration.  Basically, an e-greedy method is used,
-# but e is decayed over time as a function of episode.
-EXPLORE_CONST = 30
+EPSILON            = .15
 
 def main():
   # Define the network model.
@@ -37,12 +33,14 @@ def main():
   replay     = []
   solveCt    = 0
   seqSolveCt = 0
+  episode    = 0
 
-  for episode in range(NUM_EPISODES):
-    lastObs = env.reset()
-    done    = False
-    t       = 0 # t is the timestep.
-    randCt  = 0
+  while seqSolveCt < 100:
+    episode += 1
+    done     = False
+    t        = 0 # t is the timestep.
+    randCt   = 0
+    lastObs  = env.reset()
 
     while not done:
       t += 1
@@ -57,7 +55,7 @@ def main():
       action = np.argmax(Q)
 
       # Choose a random action occasionally so that new paths are explored.
-      if np.random.rand() < math.pow(2, -episode / EXPLORE_CONST) and seqSolveCt < FIN_TRAIN_SOLVE_CT:
+      if np.random.rand() < EPSILON and seqSolveCt < FIN_TRAIN_SOLVE_CT:
         action  = env.action_space.sample()
         randCt += 1
 
@@ -72,19 +70,19 @@ def main():
       elif done:
         seqSolveCt = 0
       
-      if seqSolveCt < FIN_TRAIN_SOLVE_CT:
-        # Save the result for replay.
-        replay.append({
-          'lastObs': lastObs,
-          'newObs' : newObs,
-          'reward' : reward,
-          'done'   : done,
-          'action' : action
-        })
+      # Save the result for replay.
+      replay.append({
+        'lastObs': lastObs,
+        'newObs' : newObs,
+        'reward' : reward,
+        'done'   : done,
+        'action' : action
+      })
 
-        if len(replay) > REP_SIZE:
-          replay.pop(np.random.randint(REP_SIZE + 1))
+      if len(replay) > REP_SIZE:
+        replay.pop(np.random.randint(REP_SIZE + 1))
         
+      if seqSolveCt < FIN_TRAIN_SOLVE_CT:
         # Create training data from the replay array.
         batch = random.sample(replay, min(len(replay), REP_BATCH_SIZE))
         X     = []
@@ -108,7 +106,7 @@ def main():
 
       #time.sleep(.02)
 
-    print('Episode {} went for {} timesteps.  {} rand acts.  {} solves and {} sequential.'.format(episode+1, t, randCt, solveCt, seqSolveCt))
+    print('Episode {} went for {} timesteps.  {} rand acts.  {} solves and {} sequential.'.format(episode, t, randCt, solveCt, seqSolveCt))
 
 if __name__ == "__main__":
   main()
