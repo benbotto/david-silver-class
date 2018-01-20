@@ -1,20 +1,20 @@
 import gym
 import math
 import numpy as np
-import tensorflow as tf
 import random
+import tensorflow as tf
 import time
-import pdb
 
 env = gym.make('CartPole-v0')
 
-OBS_SIZE       = len(env.observation_space.low)
-ACT_SIZE       = env.action_space.n
-NUM_EPISODES   = 500
-LEARN_RATE     = 0.01
-REP_SIZE       = 200
-REP_BATCH_SIZE = 20
-GAMMA          = .99
+OBS_SIZE           = len(env.observation_space.low)
+ACT_SIZE           = env.action_space.n
+NUM_EPISODES       = 6000
+LEARN_RATE         = 0.001
+REP_SIZE           = 100
+REP_BATCH_SIZE     = 20
+GAMMA              = .99
+FIN_TRAIN_SOLVE_CT = 3
 
 # Higher means more exploration.  Basically, an e-greedy method is used,
 # but e is decayed over time as a function of episode.
@@ -24,9 +24,9 @@ def main():
   # Define the network model.
   model = tf.keras.models.Sequential()
 
-  model.add(tf.keras.layers.Dense(8, input_dim=OBS_SIZE, activation="relu"))
-  model.add(tf.keras.layers.Dense(12, activation="relu"))
-  model.add(tf.keras.layers.Dense(ACT_SIZE, activation="softmax"))
+  model.add(tf.keras.layers.Dense(14, input_dim=OBS_SIZE, activation="relu"))
+  model.add(tf.keras.layers.Dense(22, activation="relu"))
+  model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
 
   opt = tf.keras.optimizers.Adam(lr=LEARN_RATE)
 
@@ -34,16 +34,19 @@ def main():
 
   # Array for holding past results.  This is "replayed" in the network to help
   # train.
-  replay = []
+  replay     = []
+  solveCt    = 0
+  seqSolveCt = 0
 
   for episode in range(NUM_EPISODES):
     lastObs = env.reset()
     done    = False
     t       = 0 # t is the timestep.
+    randCt  = 0
 
     while not done:
       t += 1
-      #env.render()
+      env.render()
 
       # Run the inputs through the network to predict an action and get the Q
       # table (the estimated rewards for the current state).
@@ -54,71 +57,58 @@ def main():
       action = np.argmax(Q)
 
       # Choose a random action occasionally so that new paths are explored.
-      if random.random() < math.pow(2, -episode / EXPLORE_CONST):
-        action = env.action_space.sample()
+      if np.random.rand() < math.pow(2, -episode / EXPLORE_CONST) and seqSolveCt < FIN_TRAIN_SOLVE_CT:
+        action  = env.action_space.sample()
+        randCt += 1
 
       # Apply the action.
-      #print('Applying action {}.'.format(action[0]))
       newObs, reward, done, _ = env.step(action)
       #print('t, newobs, reward, done')
       #print(t, newObs, reward, done)
 
-      # Save the result for replay.
-      replay.append({
-        'lastObs': lastObs,
-        'newObs' : newObs,
-        'reward' : reward,
-        'done'   : done,
-        'action' : action
-      })
-
-      if len(replay) > REP_SIZE:
-        replay.pop(np.random.randint(REP_SIZE + 1))
+      if done and t == 200:
+        solveCt    += 1
+        seqSolveCt += 1
+      elif done:
+        seqSolveCt = 0
       
-      # Create training data from the replay array.
-      batch = random.sample(replay, min(len(replay), REP_BATCH_SIZE))
-      X     = []
-      Y     = []
+      if seqSolveCt < FIN_TRAIN_SOLVE_CT:
+        # Save the result for replay.
+        replay.append({
+          'lastObs': lastObs,
+          'newObs' : newObs,
+          'reward' : reward,
+          'done'   : done,
+          'action' : action
+        })
 
-      for i in range(len(batch)):
-        X.append(batch[i]['lastObs'])
-        oldQ = model.predict(np.array([batch[i]['lastObs']]))
-        newQ = model.predict(np.array([batch[i]['newObs']]))
-        target = np.copy(oldQ)[0] # Not needed, I think.  Just use oldQ...
-        if batch[i]['done']:
-          target[batch[i]['action']] = -1
-        else:
-          target[batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
-        Y.append(target)
-      model.train_on_batch(np.array(X), np.array(Y))
+        if len(replay) > REP_SIZE:
+          replay.pop(np.random.randint(REP_SIZE + 1))
+        
+        # Create training data from the replay array.
+        batch = random.sample(replay, min(len(replay), REP_BATCH_SIZE))
+        X     = []
+        Y     = []
 
-      '''
-      # Now get Q' by feeding the new observation through the network.
-      newQ = model.predict(np.array([newObs]))
-      #print('New Q')
-      #print(newQ)
+        for i in range(len(batch)):
+          X.append(batch[i]['lastObs'])
+          oldQ = model.predict(np.array([batch[i]['lastObs']]))
+          newQ = model.predict(np.array([batch[i]['newObs']]))
+          target = np.copy(oldQ)[0] # Not needed, I think.  Just use oldQ...
 
-      # Of the Q values, this one is the max (e.g. the best estimated reward).
-      bestQ = np.max(newQ)
-      #print('Best Q')
-      #print(bestQ)
+          if batch[i]['done']:
+            target[batch[i]['action']] = -1
+          else:
+            target[batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
+          Y.append(target)
 
-      # Update the Q table for the last action.  This is the new target.
-      #gamma = 1 / t
-      gamma = .99
-      Q[0, action] = reward + gamma * bestQ
-      #print('Target Q')
-      #print(Q)
-
-      # Update the weights (train) using the updated Q target.
-      model.fit(x=np.array([lastObs]), y=Q, batch_size=1, epochs=1, verbose=0)
-      '''
+        model.train_on_batch(np.array(X), np.array(Y))
 
       lastObs = newObs
 
       #time.sleep(.02)
 
-    print('Episode {} went for {} timesteps.'.format(episode+1, t))
+    print('Episode {} went for {} timesteps.  {} rand acts.  {} solves and {} sequential.'.format(episode+1, t, randCt, solveCt, seqSolveCt))
 
 if __name__ == "__main__":
   main()
