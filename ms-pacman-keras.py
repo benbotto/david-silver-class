@@ -5,12 +5,12 @@ import random
 import tensorflow as tf
 import time
 
-env = gym.make('MsPacman-v0')
+env = gym.make('Breakout-v0')
 
 ACT_SIZE       = env.action_space.n
-LEARN_RATE     = 0.001
-REP_SIZE       = 100
-REP_BATCH_SIZE = 20
+LEARN_RATE     = 0.0025
+REP_SIZE       = 60000
+REP_BATCH_SIZE = 32
 GAMMA          = .99
 EPSILON        = .25
 
@@ -21,8 +21,7 @@ def preprocess(img):
 def main():
   obsShape   = env.observation_space.shape
   inputShape = (int(obsShape[0] / 2), int(obsShape[1] / 2), 1)
-  print(obsShape)
-  print(inputShape)
+
   # Define the network model.
   model = tf.keras.models.Sequential()
 
@@ -32,7 +31,12 @@ def main():
   #model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
 
   model.add(tf.keras.layers.Lambda(lambda x: x / 255.0, input_shape=inputShape))
-  model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=5, activation="relu"))
+  model.add(tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation="relu"))
+  model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation="relu"))
+  model.add(tf.keras.layers.Flatten())
+  model.add(tf.keras.layers.Dense(256, activation="relu"))
+  model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
+
   '''
   model.add(tf.keras.layers.MaxPooling2D())
   model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=4, activation="relu"))
@@ -62,7 +66,7 @@ def main():
     randCt        = 0
     episodeReward = 0
     lastObs       = env.reset()
-    lastObs       = preprocess(lastObs)
+    lastObs       = np.reshape(preprocess(lastObs), inputShape)
 
     while not done:
       t += 1
@@ -77,47 +81,49 @@ def main():
       action = np.argmax(Q)
 
       # Choose a random action occasionally so that new paths are explored.
-      if np.random.rand() < EPSILON:
+      if np.random.rand() < EPSILON and episode % 10 != 0:
         action  = env.action_space.sample()
         randCt += 1
 
       # Apply the action.
       newObs, reward, done, _ = env.step(action)
-      newObs = preprocess(newObs)
+      newObs = np.reshape(preprocess(newObs), inputShape)
       episodeReward += reward
+      reward = np.sign(reward)
       #print('t, newobs, reward, done')
       #print(t, newObs, reward, done)
 
-      # Save the result for replay.
-      replay.append({
-        'lastObs': lastObs,
-        'newObs' : newObs,
-        'reward' : reward,
-        'done'   : done,
-        'action' : action
-      })
+      if episode % 10 != 0:
+        # Save the result for replay.
+        replay.append({
+          'lastObs': lastObs,
+          'newObs' : newObs,
+          'reward' : reward,
+          'done'   : done,
+          'action' : action
+        })
 
-      if len(replay) > REP_SIZE:
-        replay.pop(np.random.randint(REP_SIZE + 1))
-        
-      # Create training data from the replay array.
-      batch = random.sample(replay, min(len(replay), REP_BATCH_SIZE))
-      X     = []
-      Y     = []
+        if len(replay) > REP_SIZE:
+          replay.pop(np.random.randint(REP_SIZE + 1))
+          
+        # Create training data from the replay array.
+        batch = random.sample(replay, min(len(replay), REP_BATCH_SIZE))
+        X     = []
+        Y     = []
 
-      for i in range(len(batch)):
-        X.append(batch[i]['lastObs'])
-        oldQ = model.predict(np.array([batch[i]['lastObs']]))
-        newQ = model.predict(np.array([batch[i]['newObs']]))
-        target = np.copy(oldQ)[0] # Not needed, I think.  Just use oldQ...
+        for i in range(len(batch)):
+          X.append(batch[i]['lastObs'])
+          oldQ = model.predict(np.array([batch[i]['lastObs']]))
+          newQ = model.predict(np.array([batch[i]['newObs']]))
+          target = np.copy(oldQ)[0] # Not needed, I think.  Just use oldQ...
 
-        if batch[i]['done']:
-          target[batch[i]['action']] = -1
-        else:
-          target[batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
-        Y.append(target)
+          if batch[i]['done']:
+            target[batch[i]['action']] = -1
+          else:
+            target[batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
+          Y.append(target)
 
-      model.train_on_batch(np.array(X), np.array(Y))
+        model.train_on_batch(np.array(X), np.array(Y))
 
       lastObs = newObs
 
