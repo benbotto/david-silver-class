@@ -7,7 +7,6 @@ import time
 
 env = gym.make('MsPacman-v0')
 
-OBS_SIZE       = len(env.observation_space.low)
 ACT_SIZE       = env.action_space.n
 LEARN_RATE     = 0.001
 REP_SIZE       = 100
@@ -15,18 +14,40 @@ REP_BATCH_SIZE = 20
 GAMMA          = .99
 EPSILON        = .25
 
+def preprocess(img):
+  # https://becominghuman.ai/lets-build-an-atari-ai-part-1-dqn-df57e8ff3b26
+  return np.mean(img[::2, ::2], axis=2).astype(np.uint8)
+
 def main():
+  obsShape   = env.observation_space.shape
+  inputShape = (int(obsShape[0] / 2), int(obsShape[1] / 2), 1)
+  print(obsShape)
+  print(inputShape)
   # Define the network model.
   model = tf.keras.models.Sequential()
 
-  model.add(tf.keras.layers.Flatten(input_shape=env.observation_space.shape))
-  model.add(tf.keras.layers.Dense(14, activation="relu"))
-  model.add(tf.keras.layers.Dense(22, activation="relu"))
+  #model.add(tf.keras.layers.Flatten(input_shape=env.observation_space.shape))
+  #model.add(tf.keras.layers.Dense(14, activation="relu"))
+  #model.add(tf.keras.layers.Dense(22, activation="relu"))
+  #model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
+
+  model.add(tf.keras.layers.Lambda(lambda x: x / 255.0, input_shape=inputShape))
+  model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=5, activation="relu"))
+  '''
+  model.add(tf.keras.layers.MaxPooling2D())
+  model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=4, activation="relu"))
+  model.add(tf.keras.layers.MaxPooling2D())
+  model.add(tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation="relu"))
+  model.add(tf.keras.layers.MaxPooling2D())
+  model.add(tf.keras.layers.Flatten())
+  model.add(tf.keras.layers.Dense(512, activation="relu"))
   model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
+  '''
 
   opt = tf.keras.optimizers.Adam(lr=LEARN_RATE)
 
   model.compile(loss="mean_squared_error", optimizer=opt, metrics=["mean_squared_error"])
+  model.summary()
 
   # Array for holding past results.  This is "replayed" in the network to help
   # train.
@@ -41,6 +62,7 @@ def main():
     randCt        = 0
     episodeReward = 0
     lastObs       = env.reset()
+    lastObs       = preprocess(lastObs)
 
     while not done:
       t += 1
@@ -61,6 +83,7 @@ def main():
 
       # Apply the action.
       newObs, reward, done, _ = env.step(action)
+      newObs = preprocess(newObs)
       episodeReward += reward
       #print('t, newobs, reward, done')
       #print(t, newObs, reward, done)
