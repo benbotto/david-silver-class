@@ -10,12 +10,12 @@ env = gym.make('CartPole-v0')
 
 OBS_SIZE     = len(env.observation_space.low)
 ACT_SIZE     = env.action_space.n
-NUM_EPISODES = 2000
-LEARN_RATE   = 0.1
+NUM_EPISODES = 4000
+LEARN_RATE   = 0.01
 
 # Higher means more exploration.  Basically, an e-greedy method is used,
 # but e is decayed over time as a function of episode.
-EXPLORE_CONST = 60
+EXPLORE_CONST = 30
 
 def main():
   tf.reset_default_graph()
@@ -25,12 +25,16 @@ def main():
   x = tf.placeholder(shape=[1, OBS_SIZE], dtype=tf.float32)
 
   # These are the weights which are what will be trained.
-  W  = tf.Variable(tf.random_uniform([OBS_SIZE, 5]))
-  H  = tf.nn.relu(tf.matmul(x, W))
-  W2 = tf.Variable(tf.random_uniform([5, ACT_SIZE]))
+  #W  = tf.Variable(tf.random_uniform([OBS_SIZE, ACT_SIZE]))
+  #W  = tf.Variable(tf.random_uniform([OBS_SIZE, 10]))
+  W  = tf.Variable(tf.random_uniform([OBS_SIZE, 1]))
+  #H  = tf.nn.relu(tf.matmul(x, W))
+  H  = tf.nn.softmax(tf.matmul(x, W))
+  W2 = tf.Variable(tf.random_uniform([1, ACT_SIZE]))
 
   # The action prediction is the maximum output (there are two, one for left,
   # one for right).
+  #Qout       = tf.matmul(x, W)
   Qout       = tf.matmul(H, W2)
   actPredict = tf.argmax(Qout, 1)
 
@@ -38,6 +42,7 @@ def main():
   # a solution.
   nextQ       = tf.placeholder(shape=[1, ACT_SIZE], dtype=tf.float32)
   loss        = tf.reduce_sum(tf.square(nextQ - Qout))
+  #loss        = tf.square(nextQ - Qout)
   trainer     = tf.train.GradientDescentOptimizer(learning_rate=LEARN_RATE)
   updateModel = trainer.minimize(loss)
 
@@ -54,14 +59,14 @@ def main():
 
       while not done:
         t += 1
-        #env.render()
+        env.render()
 
         # Run the inputs through the network to predict an action and get the Q
         # table.  (Both action and Q are 2D arrays with a single row, per the
         # graph defintion above.)
         action, Q = sess.run([actPredict, Qout], feed_dict={x: [lastObs]})
-        print('Q')
-        print(Q)
+        #print('Q')
+        #print(Q)
 
         # Choose a random action occasionally so that new paths are explored.
         if random.random() < math.pow(2, -episode / EXPLORE_CONST):
@@ -75,30 +80,33 @@ def main():
 
         # Now get Q' by feeding the new observation through the network.
         newQ = sess.run(Qout, feed_dict={x: [newObs]})
-        print('New Q')
-        print(newQ)
+        #print('New Q')
+        #print(newQ)
 
         # Of the Q values, this one is the max (e.g. the best estimated reward).
-        bestQ = np.max(newQ)
+        bestReward = np.max(newQ)
         #print('Best Q')
         #print(bestQ)
 
         # Update the Q table for the last action.  This is the new target.
         #gamma = 1 / t
         gamma = .99
-        Q[0, action[0]] = reward + gamma * bestQ
+        #gamma = .01
+        oldEst = Q[0, action[0]]
+        Q[0, action[0]] = reward + gamma * bestReward
+        #Q[0, action[0]] = oldEst + gamma * (reward + bestReward - oldEst)
         #print('Target Q')
         #print(Q)
 
         # Update the weights (train) using the updated Q target.
-        sess.run([updateModel, W, W2], feed_dict={x: [lastObs], nextQ: Q})
+        t1 = sess.run(updateModel, feed_dict={x: [lastObs], nextQ: Q})
+        #print(t2)
 
         lastObs = newObs
 
         #time.sleep(.02)
 
-      if episode % 100 == 0 or t > 100:
-        print('Episode {} went for {} timesteps.'.format(episode+1, t))
+      print('Episode {} went for {} timesteps.'.format(episode+1, t))
 
 if __name__ == "__main__":
   main()
