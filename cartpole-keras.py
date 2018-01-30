@@ -10,8 +10,13 @@ env = gym.make('CartPole-v0')
 OBS_SIZE           = len(env.observation_space.low)
 ACT_SIZE           = env.action_space.n
 LEARN_RATE         = 0.001
-REP_SIZE           = 100
-REP_BATCH_SIZE     = 20
+REP_SIZE           = 5000
+REP_BATCH_SIZE     = 32
+REP_LASTOBS        = 0
+REP_ACTION         = 1
+REP_REWARD         = 2
+REP_NEWOBS         = 3
+REP_DONE           = 4
 GAMMA              = .99
 FIN_TRAIN_SOLVE_CT = 3
 EPSILON            = .25
@@ -71,13 +76,7 @@ def main():
         seqSolveCt = 0
       
       # Save the result for replay.
-      replay.append({
-        'lastObs': lastObs,
-        'newObs' : newObs,
-        'reward' : reward,
-        'done'   : done,
-        'action' : action
-      })
+      replay.append((lastObs, action, reward, newObs, done))
 
       if len(replay) > REP_SIZE:
         replay.pop(np.random.randint(REP_SIZE + 1))
@@ -85,22 +84,19 @@ def main():
       if seqSolveCt < FIN_TRAIN_SOLVE_CT:
         # Create training data from the replay array.
         batch = random.sample(replay, min(len(replay), REP_BATCH_SIZE))
-        X     = []
-        Y     = []
+
+        # Predictions from the old states, which will be updated to act as the
+        # training target.
+        target = model.predict(np.array([rep[REP_LASTOBS] for rep in batch]))
+        newQ   = model.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
 
         for i in range(len(batch)):
-          X.append(batch[i]['lastObs'])
-          oldQ = model.predict(np.array([batch[i]['lastObs']]))
-          newQ = model.predict(np.array([batch[i]['newObs']]))
-          target = np.copy(oldQ)[0] # Not needed, I think.  Just use oldQ...
-
-          if batch[i]['done']:
-            target[batch[i]['action']] = -1
+          if batch[i][REP_DONE]:
+            target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD]
           else:
-            target[batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
-          Y.append(target)
+            target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD] + GAMMA * np.max(newQ[i])
 
-        model.train_on_batch(np.array(X), np.array(Y))
+        model.train_on_batch(np.array([rep[REP_LASTOBS] for rep in batch]), target)
 
       lastObs = newObs
 
