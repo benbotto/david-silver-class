@@ -7,56 +7,60 @@ import time
 
 env = gym.make('Breakout-ram-v0')
 
-ACT_SIZE           = env.action_space.n
-LEARN_RATE         = 0.0025
-REP_SIZE           = 600000
-REP_BATCH_SIZE     = 32
-REP_LASTOBS        = 0
-REP_ACTION         = 1
-REP_REWARD         = 2
-REP_NEWOBS         = 3
-REP_DONE           = 4
-GAMMA              = .99
-EPSILON_MIN        = .1
-EPSILON_DECAY_OVER = 500000
-TEST_INTERVAL      = 100
+ACT_SIZE            = env.action_space.n
+LEARN_RATE          = 0.0025
+REP_SIZE            = 1000000
+REP_BATCH_SIZE      = 32
+REP_LASTOBS         = 0
+REP_ACTION          = 1
+REP_REWARD          = 2
+REP_NEWOBS          = 3
+REP_DONE            = 4
+GAMMA               = .99
+EPSILON_MIN         = .1
+EPSILON_DECAY_OVER  = 1000000
+EPSILON_DECAY_RATE  = (EPSILON_MIN - 1) / EPSILON_DECAY_OVER
+TEST_INTERVAL       = 100
+TARGET_UPD_INTERVAL = 10000
 
 def getEpsilon(totalT):
-  return max((EPSILON_MIN - 1) / EPSILON_DECAY_OVER * totalT + 1, EPSILON_MIN)
+  return max(EPSILON_DECAY_RATE * totalT + 1, EPSILON_MIN)
 
-def main():
+def buildModel():
   # Define the network model.
   model = tf.keras.models.Sequential()
 
-  #model.add(tf.keras.layers.Flatten(input_shape=env.observation_space.shape))
-  model.add(tf.keras.layers.Dense(14, input_shape=env.observation_space.shape, activation="relu"))
-  model.add(tf.keras.layers.Dense(256, activation="relu"))
+  '''
+  model.add(tf.keras.layers.Dense(512, input_shape=env.observation_space.shape, activation="relu"))
   model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
-
+  opt = tf.keras.optimizers.RMSprop(lr=LEARN_RATE, rho=0.95, epsilon=0.01)
   '''
-  model.add(tf.keras.layers.Lambda(lambda x: x / 255.0, input_shape=inputShape))
-  model.add(tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation="relu"))
-  model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation="relu"))
-  model.add(tf.keras.layers.Flatten())
-  model.add(tf.keras.layers.Dense(256, activation="relu"))
+
+  model.add(tf.keras.layers.Lambda(lambda x: x / 255.0, input_shape=env.observation_space.shape))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
   model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
-  '''
+  opt = tf.keras.optimizers.RMSprop(lr=LEARN_RATE)
 
-  '''
-  model.add(tf.keras.layers.MaxPooling2D())
-  model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=4, activation="relu"))
-  model.add(tf.keras.layers.MaxPooling2D())
-  model.add(tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation="relu"))
-  model.add(tf.keras.layers.MaxPooling2D())
-  model.add(tf.keras.layers.Flatten())
-  model.add(tf.keras.layers.Dense(512, activation="relu"))
-  model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
-  '''
+  model.compile(loss="mean_squared_error", optimizer=opt)
 
-  opt = tf.keras.optimizers.Adam(lr=LEARN_RATE)
+  return model
 
-  model.compile(loss="mean_squared_error", optimizer=opt, metrics=["mean_squared_error"])
+def updateTargetModel(model, targetModel):
+  modelWeights       = model.trainable_weights
+  targetModelWeights = targetModel.trainable_weights
+
+  for i in range(len(targetModelWeights)):
+    targetModelWeights[i].assign(modelWeights[i])
+
+def main():
+  model = buildModel()
   model.summary()
+
+  targetModel = buildModel()
+  updateTargetModel(model, targetModel)
 
   # Array for holding past results.  This is "replayed" in the network to help
   # train.
@@ -89,7 +93,7 @@ def main():
         # Run the inputs through the network to predict an action and get the Q
         # table (the estimated rewards for the current state).
         Q = model.predict(np.array([lastObs]))
-        #print('Q: {}'.format(Q))
+        print('Q: {}'.format(Q))
 
         # Action is the index of the element with the hightest predicted reward.
         action = np.argmax(Q)
@@ -113,8 +117,8 @@ def main():
 
         # Predictions from the old states, which will be updated to act as the
         # training target.
-        target = model.predict(np.array([rep[REP_LASTOBS] for rep in batch]))
-        newQ   = model.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
+        target = targetModel.predict(np.array([rep[REP_LASTOBS] for rep in batch]))
+        newQ   = targetModel.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
 
         for i in range(len(batch)):
           if batch[i][REP_DONE]:
@@ -122,26 +126,12 @@ def main():
           else:
             target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD] + GAMMA * np.max(newQ[i])
 
-        model.train_on_batch(np.array([rep[REP_LASTOBS] for rep in batch]), target)
+        mse = model.train_on_batch(np.array([rep[REP_LASTOBS] for rep in batch]), target)
+        print(mse)
 
-        '''
-        X     = []
-        Y     = []
-
-        for i in range(len(batch)):
-          X.append(batch[i]['lastObs'])
-          oldQ = model.predict(np.array([batch[i]['lastObs']]))
-          newQ = model.predict(np.array([batch[i]['newObs']]))
-          target = np.copy(oldQ)[0] # Not needed, I think.  Just use oldQ...
-
-          if batch[i]['done']:
-            target[batch[i]['action']] = batch[i]['reward']
-          else:
-            target[batch[i]['action']] = batch[i]['reward'] + GAMMA * np.max(newQ)
-          Y.append(target)
-
-        model.train_on_batch(np.array(X), np.array(Y))
-        '''
+        if totalT % TARGET_UPD_INTERVAL == 0:
+          print("Updating target model.")
+          updateTargetModel(model, targetModel)
 
       lastObs = newObs
 
