@@ -8,7 +8,7 @@ import time
 env = gym.make('Breakout-ram-v0')
 
 ACT_SIZE            = env.action_space.n
-LEARN_RATE          = 0.0025
+LEARN_RATE          = 0.0002
 REP_SIZE            = 1000000
 REP_BATCH_SIZE      = 32
 REP_LASTOBS         = 0
@@ -30,17 +30,8 @@ def buildModel():
   # Define the network model.
   model = tf.keras.models.Sequential()
 
-  '''
-  model.add(tf.keras.layers.Dense(512, input_shape=env.observation_space.shape, activation="relu"))
-  model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
-  opt = tf.keras.optimizers.RMSprop(lr=LEARN_RATE, rho=0.95, epsilon=0.01)
-  '''
-
   model.add(tf.keras.layers.Lambda(lambda x: x / 255.0, input_shape=env.observation_space.shape))
-  model.add(tf.keras.layers.Dense(128, activation="relu"))
-  model.add(tf.keras.layers.Dense(128, activation="relu"))
-  model.add(tf.keras.layers.Dense(128, activation="relu"))
-  model.add(tf.keras.layers.Dense(128, activation="relu"))
+  model.add(tf.keras.layers.Dense(512, activation="relu"))
   model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
   opt = tf.keras.optimizers.RMSprop(lr=LEARN_RATE)
 
