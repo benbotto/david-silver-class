@@ -22,6 +22,7 @@ EPSILON_DECAY_OVER  = 1000000
 EPSILON_DECAY_RATE  = (EPSILON_MIN - 1) / EPSILON_DECAY_OVER
 TEST_INTERVAL       = 100
 TARGET_UPD_INTERVAL = 10000
+MODEL_FILE_NAME     = "weights_2018_03_31_14_41.h5"
 
 def getEpsilon(totalT):
   return max(EPSILON_DECAY_RATE * totalT + 1, EPSILON_MIN)
@@ -31,7 +32,10 @@ def buildModel():
   model = tf.keras.models.Sequential()
 
   model.add(tf.keras.layers.Lambda(lambda x: x / 255.0, input_shape=env.observation_space.shape))
-  model.add(tf.keras.layers.Dense(512, activation="relu"))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
+  model.add(tf.keras.layers.Dense(128, activation="relu"))
   model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
   opt = tf.keras.optimizers.RMSprop(lr=LEARN_RATE)
 
@@ -40,11 +44,8 @@ def buildModel():
   return model
 
 def updateTargetModel(model, targetModel):
-  modelWeights       = model.trainable_weights
-  targetModelWeights = targetModel.trainable_weights
-
-  for i in range(len(targetModelWeights)):
-    targetModelWeights[i].assign(modelWeights[i])
+  targetModel.set_weights(model.get_weights())
+  model.save(MODEL_FILE_NAME)
 
 def main():
   model = buildModel()
@@ -80,6 +81,14 @@ def main():
       if np.random.rand() < epsilon and episode % TEST_INTERVAL != 0:
         action  = env.action_space.sample()
         randCt += 1
+      elif episode % TEST_INTERVAL != 0:
+        # Run the inputs through the network to predict an action and get the Q
+        # table (the estimated rewards for the current state).
+        Q = targetModel.predict(np.array([lastObs]))
+        print('Q: {}'.format(Q))
+
+        # Action is the index of the element with the hightest predicted reward.
+        action = np.argmax(Q)
       else:
         # Run the inputs through the network to predict an action and get the Q
         # table (the estimated rewards for the current state).
