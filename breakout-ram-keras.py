@@ -22,7 +22,7 @@ EPSILON_DECAY_OVER  = 1000000
 EPSILON_DECAY_RATE  = (EPSILON_MIN - 1) / EPSILON_DECAY_OVER
 TEST_INTERVAL       = 100
 TARGET_UPD_INTERVAL = 10000
-MODEL_FILE_NAME     = "weights_2018_03_31_14_41.h5"
+MODEL_FILE_NAME     = "weights_2018_02_01_12_16.h5"
 
 def getEpsilon(totalT):
   return max(EPSILON_DECAY_RATE * totalT + 1, EPSILON_MIN)
@@ -117,14 +117,16 @@ def main():
 
         # Predictions from the old states, which will be updated to act as the
         # training target.
-        target = targetModel.predict(np.array([rep[REP_LASTOBS] for rep in batch]))
+        # Using Double DQN.
+        target = model.predict(np.array([rep[REP_LASTOBS] for rep in batch]))
         newQ   = targetModel.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
+        actSel = model.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
 
         for i in range(len(batch)):
           if batch[i][REP_DONE]:
             target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD]
           else:
-            target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD] + GAMMA * np.max(newQ[i])
+            target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD] + GAMMA * newQ[i][np.argmax(actSel[i])]
 
         mse = model.train_on_batch(np.array([rep[REP_LASTOBS] for rep in batch]), target)
         print(mse)
