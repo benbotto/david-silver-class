@@ -4,6 +4,7 @@ import numpy as np
 import random
 import tensorflow as tf
 import time
+from SumTree import SumTree
 
 env = gym.make('Breakout-ram-v0')
 
@@ -22,7 +23,7 @@ EPSILON_DECAY_OVER  = 1000000
 EPSILON_DECAY_RATE  = (EPSILON_MIN - 1) / EPSILON_DECAY_OVER
 TEST_INTERVAL       = 100
 TARGET_UPD_INTERVAL = 10000
-MODEL_FILE_NAME     = "weights_2018_02_01_12_16.h5"
+MODEL_FILE_NAME     = "weights_breakout-ram-keras__ddqn_prio_2018_02_02_02_23.h5"
 
 def getEpsilon(totalT):
   return max(EPSILON_DECAY_RATE * totalT + 1, EPSILON_MIN)
@@ -56,7 +57,7 @@ def main():
 
   # Array for holding past results.  This is "replayed" in the network to help
   # train.
-  replay    = []
+  replay    = SumTree(REP_SIZE)
   episode   = 0
   maxReward = -1000000
   totalT    = 0
@@ -72,6 +73,7 @@ def main():
     while not done:
       t      += 1
       totalT += 1
+      randAct = False
 
       env.render()
 
@@ -106,34 +108,48 @@ def main():
       #print(t, newObs, reward, done)
 
       if episode % TEST_INTERVAL != 0:
-        # Save the result for replay.
-        replay.append((lastObs, action, reward, newObs, done))
+        # Save the result for replay.  Priority is set to 1 here (high replay
+        # prob) and updated on the forward pass.
+        replay.add(1.0, (lastObs, action, reward, newObs, done))
 
-        if len(replay) > REP_SIZE:
-          replay.pop(np.random.randint(REP_SIZE + 1))
-          
-        # Create training data from the replay array.
-        batch = random.sample(replay, min(len(replay), REP_BATCH_SIZE))
+        if replay.size >= REP_BATCH_SIZE:
+          # Create training data from the replay array.
+          segment = replay.total() / REP_BATCH_SIZE
+          batch   = []
+          indices = []
 
-        # Predictions from the old states, which will be updated to act as the
-        # training target.
-        # Using Double DQN.
-        target = model.predict(np.array([rep[REP_LASTOBS] for rep in batch]))
-        newQ   = targetModel.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
-        actSel = model.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
+          for i in range(REP_BATCH_SIZE):
+            print('{}, {}, {}, {}, {}'.format(segment, i, segment * i, segment * (i + 1), np.random.uniform(segment * i, segment * (i + 1))))
+            (ind, p, data) = replay.get(np.random.uniform(segment * i, segment * (i + 1)))
+            batch.append(data)
+            indices.append(ind)
+            print(ind, p, data)
 
-        for i in range(len(batch)):
-          if batch[i][REP_DONE]:
-            target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD]
-          else:
-            target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD] + GAMMA * newQ[i][np.argmax(actSel[i])]
+          # Predictions from the old states, which will be updated to act as the
+          # training target.
+          # Using Double DQN.
+          target = model.predict(np.array([rep[REP_LASTOBS] for rep in batch]))
+          newQ   = targetModel.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
+          actSel = model.predict(np.array([rep[REP_NEWOBS] for rep in batch]))
 
-        mse = model.train_on_batch(np.array([rep[REP_LASTOBS] for rep in batch]), target)
-        print(mse)
+          for i in range(len(batch)):
+            act = np.argmax(actSel[i])
 
-        if totalT % TARGET_UPD_INTERVAL == 0:
-          print("Updating target model.")
-          updateTargetModel(model, targetModel)
+            if batch[i][REP_DONE]:
+              target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD]
+            else:
+              target[i][batch[i][REP_ACTION]] = batch[i][REP_REWARD] + GAMMA * newQ[i][act]
+
+            error = np.abs(target[i][batch[i][REP_ACTION]] - (batch[i][REP_REWARD] + GAMMA * newQ[i][act]))
+            p = (error + .01) ** .6
+            replay.update(indices[i], p)
+
+          mse = model.train_on_batch(np.array([rep[REP_LASTOBS] for rep in batch]), target)
+          print(mse)
+
+          if totalT % TARGET_UPD_INTERVAL == 0:
+            print("Updating target model.")
+            updateTargetModel(model, targetModel)
 
       lastObs = newObs
 
