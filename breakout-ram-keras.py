@@ -1,29 +1,32 @@
-import gym
 import math
 import numpy as np
 import random
 import tensorflow as tf
 import time
 from SumTree import SumTree
+from wrapper.BreakoutRamWrapper import BreakoutRamWrapper
+from collections import deque
 
-env = gym.make('Breakout-ram-v0')
+env = BreakoutRamWrapper()
 
-ACT_SIZE            = env.action_space.n
-LEARN_RATE          = 0.0002
-REP_SIZE            = 1000000
-REP_BATCH_SIZE      = 32
-REP_LASTOBS         = 0
-REP_ACTION          = 1
-REP_REWARD          = 2
-REP_NEWOBS          = 3
-REP_DONE            = 4
-GAMMA               = .99
-EPSILON_MIN         = .1
-EPSILON_DECAY_OVER  = 1000000
-EPSILON_DECAY_RATE  = (EPSILON_MIN - 1) / EPSILON_DECAY_OVER
-TEST_INTERVAL       = 100
-TARGET_UPD_INTERVAL = 10000
-MODEL_FILE_NAME     = "weights_breakout-ram-keras__ddqn_prio_2018_02_02_02_23.h5"
+ACT_SIZE              = env.action_space.n
+LEARN_RATE            = 0.0002
+REP_SIZE              = 1000000
+REP_BATCH_SIZE        = 32
+REP_LASTOBS           = 0
+REP_ACTION            = 1
+REP_REWARD            = 2
+REP_NEWOBS            = 3
+REP_DONE              = 4
+GAMMA                 = .99
+EPSILON_MIN           = .1
+EPSILON_DECAY_OVER    = 1000000
+EPSILON_DECAY_RATE    = (EPSILON_MIN - 1) / EPSILON_DECAY_OVER
+TEST_INTERVAL         = 100
+TARGET_UPD_INTERVAL   = 10000
+SAVE_WEIGHTS_INTERVAL = 500000
+MODEL_FILE_NAME       = "weights_breakout-ram-keras__ddqn_prio_2018_02_06_08_22.h5"
+AVG_REWARD_EPISODES   = 100
 
 def getEpsilon(totalT):
   return max(EPSILON_DECAY_RATE * totalT + 1, EPSILON_MIN)
@@ -46,7 +49,6 @@ def buildModel():
 
 def updateTargetModel(model, targetModel):
   targetModel.set_weights(model.get_weights())
-  model.save(MODEL_FILE_NAME)
 
 def main():
   model = buildModel()
@@ -61,6 +63,7 @@ def main():
   episode   = 0
   maxReward = -1000000
   totalT    = 0
+  rewardQue = deque([], maxlen=AVG_REWARD_EPISODES)
 
   while episode < 10000000:
     episode      += 1
@@ -83,7 +86,7 @@ def main():
       if np.random.rand() < epsilon and episode % TEST_INTERVAL != 0:
         action  = env.action_space.sample()
         randCt += 1
-      elif episode % TEST_INTERVAL != 0:
+      elif episode % TEST_INTERVAL == 0:
         # Run the inputs through the network to predict an action and get the Q
         # table (the estimated rewards for the current state).
         Q = targetModel.predict(np.array([lastObs]))
@@ -119,11 +122,11 @@ def main():
           indices = []
 
           for i in range(REP_BATCH_SIZE):
-            print('{}, {}, {}, {}, {}'.format(segment, i, segment * i, segment * (i + 1), np.random.uniform(segment * i, segment * (i + 1))))
+            #print('{}, {}, {}, {}, {}'.format(segment, i, segment * i, segment * (i + 1), np.random.uniform(segment * i, segment * (i + 1))))
             (ind, p, data) = replay.get(np.random.uniform(segment * i, segment * (i + 1)))
             batch.append(data)
             indices.append(ind)
-            print(ind, p, data)
+            #print(ind, p, data)
 
           # Predictions from the old states, which will be updated to act as the
           # training target.
@@ -145,11 +148,15 @@ def main():
             replay.update(indices[i], p)
 
           mse = model.train_on_batch(np.array([rep[REP_LASTOBS] for rep in batch]), target)
-          print(mse)
+          #print(mse)
 
           if totalT % TARGET_UPD_INTERVAL == 0:
             print("Updating target model.")
             updateTargetModel(model, targetModel)
+
+          if totalT % SAVE_WEIGHTS_INTERVAL == 0:
+            print("Saving weights.")
+            targetModel.save(MODEL_FILE_NAME)
 
       lastObs = newObs
 
@@ -158,8 +165,11 @@ def main():
     if episodeReward > maxReward:
       maxReward = episodeReward
 
-    print('Episode {} went for {} timesteps, {} total.  {} rand acts.  Episode reward: {}.  Best reward: {}.  Epsilon: {}'
-      .format(episode, t, totalT, randCt, episodeReward, maxReward, epsilon))
+    rewardQue.append(episodeReward)
+    avgReward = sum(rewardQue) / len(rewardQue)
+
+    print('Episode {} went for {} timesteps, {} total.  {} rand acts.  Episode reward: {}.  Best reward: {}.  Average reward: {}. Epsilon: {}'
+      .format(episode, t, totalT, randCt, episodeReward, maxReward, avgReward, epsilon))
 
 if __name__ == "__main__":
   main()
