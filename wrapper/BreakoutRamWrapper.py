@@ -21,7 +21,7 @@ class BreakoutRamWrapper:
 
     if info['ale.lives'] != 5:
       done   = True
-      reward = 0
+      reward = -1
 
     return new_obs, reward, done, info
 
