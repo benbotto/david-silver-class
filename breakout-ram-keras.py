@@ -22,10 +22,10 @@ GAMMA                 = .99
 EPSILON_MIN           = .1
 EPSILON_DECAY_OVER    = 1000000
 EPSILON_DECAY_RATE    = (EPSILON_MIN - 1) / EPSILON_DECAY_OVER
-TEST_INTERVAL         = 100
+TEST_INTERVAL         = 1000
 TARGET_UPD_INTERVAL   = 10000
 SAVE_WEIGHTS_INTERVAL = 500000
-MODEL_FILE_NAME       = "weights_breakout-ram-keras__ddqn_prio_2018_02_06_08_22.h5"
+MODEL_FILE_NAME       = "weights_breakout-ram-keras__ddqn_prio_-1_life_loss_2018_02_06_12_08.h5"
 AVG_REWARD_EPISODES   = 100
 
 def getEpsilon(totalT):
@@ -41,7 +41,7 @@ def buildModel():
   model.add(tf.keras.layers.Dense(128, activation="relu"))
   model.add(tf.keras.layers.Dense(128, activation="relu"))
   model.add(tf.keras.layers.Dense(ACT_SIZE, activation="linear"))
-  opt = tf.keras.optimizers.RMSprop(lr=LEARN_RATE)
+  opt = tf.keras.optimizers.Adam(lr=LEARN_RATE)
 
   model.compile(loss="mean_squared_error", optimizer=opt)
 
