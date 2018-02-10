@@ -6,7 +6,7 @@ class BreakoutRamWrapper:
    ' Init.
   '''
   def __init__(self):
-    self.env = gym.make('Breakout-ram-v0')
+    self.env = gym.make('Breakout-ramDeterministic-v4')
     self.action_space = self.env.action_space
     self.observation_space = self.env.observation_space
 
